@@ -1,18 +1,21 @@
 import tkinter as tk
 from tkinter.constants import *
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import MutableSet, FrozenSet
 import random
+import time
 
 CELL_DEFAULT_COLOUR = "white"
+ANIMATE_DELAY = 0.01
 
 @dataclass
+@dataclass(unsafe_hash=True)
 class Cell:
     x0: int
     y0: int
     x1: int
     y1: int
-    colour: str = CELL_DEFAULT_COLOUR
+    colour: str = field(default=CELL_DEFAULT_COLOUR, compare=False)
 
 
 def colour_cell(cell: Cell, canvas: tk.Canvas, colour: str):
@@ -31,7 +34,7 @@ class WaveFunctionApp:
         self.canvas = tk.Canvas(root, width=self.width, height=self.height)
         self.canvas.pack()
         self._cells = None
-        self._drawn = []
+        self._drawn = set()
 
     def go(self):
         self._draw_grid()
@@ -42,13 +45,13 @@ class WaveFunctionApp:
         return int(self.width / self.step_count)
 
     @property
-    def cells(self) -> List[Cell]:
+    def cells(self) -> FrozenSet[Cell]:
         if self._cells is None:
             self._cells = self._get_cells()
-        return self._cells
+        return set(self._cells)
 
     @property
-    def drawn(self) -> List[Cell]:
+    def drawn(self) -> MutableSet[Cell]:
         return self._drawn
 
     @drawn.setter
@@ -71,7 +74,7 @@ class WaveFunctionApp:
             line = (x_start, y, x_end, y)
             self.canvas.create_line(line)
 
-    def _get_cells(self) -> List[Cell]:
+    def _get_cells(self) -> FrozenSet[Cell]:
         cells = []
         for x in range(0, self.width, self.step_size):
             for y in range(0, self.height, self.step_size):
@@ -87,35 +90,49 @@ class WaveFunctionApp:
         next_cell = tk.Button(button_frame, text="next cell")
         fill_all = tk.Button(button_frame, text="fill all")
         reset = tk.Button(button_frame, text="reset")
+        animate = tk.Button(button_frame, text="animate")
 
         button_frame.columnconfigure(0, weight=1)
         button_frame.columnconfigure(1, weight=1)
         button_frame.columnconfigure(2, weight=1)
+        button_frame.columnconfigure(3, weight=1)
 
         next_cell.grid(row=0, column=0, sticky=tk.W+tk.E)
         fill_all.grid(row=0, column=1, sticky=tk.W+tk.E)
         reset.grid(row=0, column=2, sticky=tk.W+tk.E)
+        animate.grid(row=0, column=3, sticky=tk.W+tk.E)
 
         next_cell.bind("<Button-1>", self.go_click)
         fill_all.bind("<Button-1>", self.fill_all)
         reset.bind("<Button-1>", self.reset)
+        animate.bind("<Button-1>", self.animate)
     
     def go_click(self, event: tk.Event) -> None:
-        next = random.choice(self.cells)
-        self.drawn.append(next)
+        next = random.choice(list(self.cells))
+        self.drawn.add(next)
         colour_cell(next, self.canvas, "blue") 
     
     def fill_all(self, event: tk.Event) -> None:
         for cell in self.cells:
             cell.colour = "blue"
-            self.drawn.append(cell)
+            self.drawn.add(cell)
             colour_cell(cell, self.canvas, cell.colour)
     
     def reset(self, event: tk.Event) -> None:
         for cell in self.drawn:
             cell.colour = CELL_DEFAULT_COLOUR
             colour_cell(cell, self.canvas, cell.colour)
-        self.drawn = []
+        self.drawn = set()
+    
+    def animate(self, event: tk.Event) -> None:
+        for cell in self.cells:
+            if cell not in self.drawn:
+                cell.colour = "blue"
+                self.drawn.add(cell)
+                colour_cell(cell, self.canvas, cell.colour)
+                self.canvas.update()
+                time.sleep(ANIMATE_DELAY)
+            
 
 
 if __name__ == "__main__":
