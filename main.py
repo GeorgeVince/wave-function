@@ -4,9 +4,11 @@ from dataclasses import dataclass, field
 from typing import MutableSet, FrozenSet
 import random
 import time
+import threading
 
 CELL_DEFAULT_COLOUR = "white"
 ANIMATE_DELAY = 0.01
+
 
 @dataclass
 @dataclass(unsafe_hash=True)
@@ -35,6 +37,8 @@ class WaveFunctionApp:
         self.canvas.pack()
         self._cells = None
         self._drawn = set()
+        self.animate_stop = threading.Event()
+        self.animate_running = threading.Event()
 
     def go(self):
         self._draw_grid()
@@ -57,7 +61,6 @@ class WaveFunctionApp:
     @drawn.setter
     def drawn(self, drawn):
         self._drawn = drawn
-
 
     def _draw_grid(self):
         y_start = 0
@@ -86,7 +89,7 @@ class WaveFunctionApp:
     def _draw_buttons(self) -> None:
         button_frame = tk.Frame(self.root)
         button_frame.pack(fill=tk.X, side=tk.BOTTOM)
-        
+
         next_cell = tk.Button(button_frame, text="next cell")
         fill_all = tk.Button(button_frame, text="fill all")
         reset = tk.Button(button_frame, text="reset")
@@ -97,41 +100,55 @@ class WaveFunctionApp:
         button_frame.columnconfigure(2, weight=1)
         button_frame.columnconfigure(3, weight=1)
 
-        next_cell.grid(row=0, column=0, sticky=tk.W+tk.E)
-        fill_all.grid(row=0, column=1, sticky=tk.W+tk.E)
-        reset.grid(row=0, column=2, sticky=tk.W+tk.E)
-        animate.grid(row=0, column=3, sticky=tk.W+tk.E)
+        next_cell.grid(row=0, column=0, sticky=tk.W + tk.E)
+        fill_all.grid(row=0, column=1, sticky=tk.W + tk.E)
+        reset.grid(row=0, column=2, sticky=tk.W + tk.E)
+        animate.grid(row=0, column=3, sticky=tk.W + tk.E)
 
         next_cell.bind("<Button-1>", self.go_click)
         fill_all.bind("<Button-1>", self.fill_all)
         reset.bind("<Button-1>", self.reset)
         animate.bind("<Button-1>", self.animate)
-    
+
     def go_click(self, event: tk.Event) -> None:
         next = random.choice(list(self.cells))
         self.drawn.add(next)
-        colour_cell(next, self.canvas, "blue") 
-    
+        colour_cell(next, self.canvas, "blue")
+
     def fill_all(self, event: tk.Event) -> None:
         for cell in self.cells:
             cell.colour = "blue"
             self.drawn.add(cell)
             colour_cell(cell, self.canvas, cell.colour)
-    
+
     def reset(self, event: tk.Event) -> None:
+        self.animate_stop.set()
         for cell in self.drawn:
             cell.colour = CELL_DEFAULT_COLOUR
             colour_cell(cell, self.canvas, cell.colour)
+        
+        time.sleep(0.5)
+        self.animate_stop.clear()
+        
         self.drawn = set()
-    
-    def animate(self, event: tk.Event) -> None:
+
+    def _animate(self) -> None:
         for cell in self.cells:
+            if self.animate_stop.is_set():
+                break
+
             if cell not in self.drawn:
                 cell.colour = "blue"
                 self.drawn.add(cell)
                 colour_cell(cell, self.canvas, cell.colour)
                 self.canvas.update()
                 time.sleep(ANIMATE_DELAY)
+        self.animate_running.clear()
+
+    def animate(self, event: tk.Event) -> None:
+        if not self.animate_running.is_set():
+            self.animate_running.set()
+            threading.Thread(target=self._animate).start()
             
 
 
